@@ -1,9 +1,12 @@
+#include <Network.h>
+
 #define MIN_LENGTH 3
 #define MAX_LENGTH 6
 #define FLASH_DURATION 400
 #define FLASH_DELAY 300
 #define FLASH_PAUSE 5000
 
+Network* network;
 const uint8_t buttons[] = {5, 2, 3, 4};//R B G Y
 const uint8_t leds[] = {11, 8, 9, 10};//R B G Y
 uint8_t sequenceLength;
@@ -17,7 +20,9 @@ bool input = false;
 bool done = false;
 
 void setup() {
-  Serial.begin(9600);
+  network = new Network(9600);
+  network->init(false);
+  network->receive
   randomSeed(analogRead(0));
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
@@ -78,6 +83,7 @@ bool interruptibleDelay(long m) {
 }
 
 void loop() {
+  network->update(*onNetwork);
   if(done) return;
   if(!input) {
     for(int i = 0; !input && i < currentRound; i++) {
@@ -162,4 +168,9 @@ void inputLoop() {
       return;
     }
   }
+}
+
+void onNetwork(Network* network, const uint8_t *buffer, const size_t length) {
+  if(length == NULL || length == 0) return;
+  uint8_t packageType = buffer[0];
 }
