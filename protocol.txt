@@ -1,0 +1,7 @@
+PROTOCOL
+#0 : INIT
+#1 : INIT_SYNC
+#2 : START
+#3 : OVER
+#4 : STRIKE
+    [4]

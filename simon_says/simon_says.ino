@@ -1,4 +1,5 @@
 #include <Network.h>
+#include <Bounce2.h>
 
 #define MIN_LENGTH 3
 #define MAX_LENGTH 6
@@ -7,7 +8,9 @@
 #define FLASH_PAUSE 5000
 
 Network* network;
-const uint8_t buttons[] = {5, 2, 3, 4};//R B G Y
+
+const uint8_t button_pins[] = {5, 2, 3, 4};//R B G Y
+Bounce buttons[4];// = {5, 2, 3, 4};//R B G Y
 const uint8_t leds[] = {11, 8, 9, 10};//R B G Y
 uint8_t sequenceLength;
 uint8_t *ledSequence;
@@ -20,14 +23,16 @@ bool input = false;
 bool done = false;
 
 void setup() {
-  network = new Network(9600);
-  network->init(false);
-  network->receive
+  //network = new Network(9600);
+  //network->init(false);
+  Serial.begin(9600);
   randomSeed(analogRead(0));
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);
   for(int i = 0; i < 4; i++) {
-    pinMode(buttons[i], INPUT_PULLUP);
+    buttons[i] = Bounce();
+    buttons[i].attach(button_pins[i], INPUT_PULLUP);
+    buttons[i].interval(50);
     digitalWrite(leds[i], LOW);
     pinMode(leds[i], OUTPUT);
   }
@@ -74,7 +79,7 @@ bool interruptibleDelay(long m) {
   long t = millis();
   while(t + m > millis()) {
     for(int i = 0; i < 4; i++) {
-      if(digitalRead(buttons[i]) == LOW) {
+      if(buttons[i].read() == LOW) {
         return true;
       }
     }
@@ -83,7 +88,12 @@ bool interruptibleDelay(long m) {
 }
 
 void loop() {
-  network->update(*onNetwork);
+  for(int i = 0; i < 4; i++) {
+    buttons[i].update();
+    Serial.println(buttons[i].read());
+  }
+  Serial.println();
+  //network->update(*onNetwork);
   if(done) return;
   if(!input) {
     for(int i = 0; !input && i < currentRound; i++) {
@@ -114,7 +124,7 @@ void loop() {
 
 int readButton() {
   for(int i = 0; i < 4; i++) {
-    if(digitalRead(buttons[i]) == LOW) {
+    if(buttons[i].read() == LOW) {
       return i;
     }
   }

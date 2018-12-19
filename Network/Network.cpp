@@ -2,16 +2,16 @@
 #include "Arduino.h"
 #define BROADCAST_ADDR -1
 
-typedef void (*callback_func)(Network* network, const uint8_t *buffer, const size_t length);
+typedef void (*callback_func)(Network* network, const uint8_t src, const uint8_t *buffer, const size_t length);
 
 Network::Network(unsigned long baud) {
   Serial.begin(baud);
 }
 
-void listenMaster(Network* network, const uint8_t *buffer, const size_t length) {
+void listenMaster(Network* network, const uint8_t src, const uint8_t *buffer, const size_t length) {
   
 }
-void listenSlave(Network* network, const uint8_t *buffer, const size_t length) {
+void listenSlave(Network* network, const uint8_t src, const uint8_t *buffer, const size_t length) {
   if(length == 1) {
     network->_id = buffer[0] + 1;
     uint8_t data[] = {buffer[0] + 1};
@@ -72,7 +72,7 @@ void Network::receive(bool blocking, callback_func callback) {
     send_raw(dst, src, _buffer, offset);
   }
   if(dst == -1 || dst == _id) {
-    callback(this, _buffer, offset);
+    callback(this, src, _buffer, offset);
   }
   else if(blocking) {
     receive(blocking, callback);
