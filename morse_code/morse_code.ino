@@ -86,16 +86,21 @@ void setup() {
 }
 
 void loop() {
+  lastTime = curTime;
+  durationLeft -= deltaT();
+  if(durationLeft <= 0) {
+    advance();
+  }
+}
+
+long deltaT() {
   long curTime = millis();
   long deltaT = curTime - lastTime;
   lastTime = curTime;
   if(deltaT < 0) {
     deltaT += INT_MAX;
   }
-  durationLeft -= deltaT;
-  if(durationLeft <= 0) {
-    advance();
-  }
+  return deltaT;
 }
 
 void advance() {

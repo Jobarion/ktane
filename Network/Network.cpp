@@ -9,7 +9,7 @@ Network::Network(unsigned long baud) {
 }
 
 void listenMaster(Network* network, const uint8_t src, const uint8_t *buffer, const size_t length) {
-  
+  network->networkSize = buffer[0] + 1;
 }
 void listenSlave(Network* network, const uint8_t src, const uint8_t *buffer, const size_t length) {
   if(length == 1) {
@@ -30,17 +30,23 @@ void Network::init(bool master) {
   }
 }
 
-
 void Network::update(callback_func callback) {
   receive(false, callback);
 }
 
 void Network::receive(bool blocking, callback_func callback) {
-  if(awaitingPacket && Serial.available() < 3) {
-    if(!blocking) return;
-    while(Serial.available() < 3);
+  if(discarding) {
+    while(required > 0 && Serial.available() > 0) {
+      Serial.read();
+      required--;
+    }
+    discarding = required > 0;
+    if(blocking) {
+      receive(blocking, callback);
+    }
+    return;
   }
-  if(awaitingPacket) {
+  else if(!readingPacket) {
     if(Serial.available() < 3) {
       if(!blocking) return;
       while(Serial.available() < 3);
@@ -50,16 +56,11 @@ void Network::receive(bool blocking, callback_func callback) {
     required = Serial.read();
     //Discard
     if(src == _id || required > MESSAGE_SIZE_MAX) {
-      while(required > 0) {
-        Serial.read();
-        required--;
-      }
-      if(blocking) {
-        receive(blocking, callback);
-      }
+      discarding = true;
+      receive(blocking, callback);
       return;
     }
-    awaitingPacket = false;
+    readingPacket = true;
   }
   do {
     size_t actual = Serial.readBytes(_buffer + (sizeof(uint8_t) * offset), required);
@@ -67,12 +68,14 @@ void Network::receive(bool blocking, callback_func callback) {
     offset += actual;
   } while(required > 0 && blocking);
   if(required > 0) return;
-  awaitingPacket = true;
+  readingPacket = false;
+  uint16_t oldOffset = offset;
+  offset = 0;
   if(dst == -1 || dst != _id) {
-    send_raw(dst, src, _buffer, offset);
+    send_raw(dst, src, _buffer, oldOffset);
   }
   if(dst == -1 || dst == _id) {
-    callback(this, src, _buffer, offset);
+    callback(this, src, _buffer, oldOffset);
   }
   else if(blocking) {
     receive(blocking, callback);

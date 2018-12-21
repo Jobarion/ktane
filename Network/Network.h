@@ -5,6 +5,7 @@ class Network {
     public:
         Network(unsigned long baud);
         int8_t _id = 0;
+        uint8_t networkSize = 1;
         void init(bool master);
         size_t send(const int8_t dst, const uint8_t *buffer, const size_t length);
         size_t broadcast(const uint8_t *buffer, const size_t length);
@@ -14,7 +15,8 @@ class Network {
         enum {MESSAGE_SIZE_MAX=128};
         
     private:
-        bool awaitingPacket = true;
+        bool readingPacket = false;
+        bool discarding = false;
         uint16_t offset = 0;
         uint8_t required = 0;
         int8_t dst = 0;

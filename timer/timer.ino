@@ -1,3 +1,5 @@
+#include <Network.h>
+
 #define SECONDS 720
 #define D_1 14
 #define SEG_A 2
@@ -5,8 +7,78 @@
 #define TIMER_MSEC 64911
 
 long hundSecs = 7200;
+Network* network;
+
+enum phase {
+  INIT,
+  INIT_SYNC,
+  RUNNING,
+  OVER
+};
+
+struct settings {
+  uint8_t maxStrikes;
+  uint8_t snd_trn;
+  uint8_t bob_rca;
+  uint8_t battery_aa : 4;
+  uint8_t battery_d : 4;
+};
+
+union settings_u {
+  settings settings;
+  uint8_t serialized[sizeof(struct settings)];
+};
+
+struct state {
+  phase phase = INIT;
+  uint8_t strikes = 0;
+};
+
+state gameState;
+settings settings;
+
 
 void setup() {
+  network = new Network(9600);
+  network->init(false);
+}
+
+void loop() {
+  network->update(*acceptPacket);
+  if(gameState.phase == RUNNING) {
+    gameLoop();
+  }
+}
+
+void terminate() {
+  uint8_t buffer[] = {3};
+  gameState.phase = OVER;
+  network->broadcast(buffer, 1);
+}
+
+void initSync() {
+  gameState.phase = INIT_SYNC;
+  uint8_t buffer[1];
+  buffer[0] = 1;
+  network->send(network->_id - 1, buffer, 1);
+}
+
+void acceptPacket(Network* network, const uint8_t src, const uint8_t *buffer, const size_t length) {
+  if(length == 0 || buffer == NULL) return;
+  switch(buffer[0]) {
+    case 0: initGame(); break;
+    case 1: initSync(); break;
+    case 2: {
+      gameState.phase = RUNNING; 
+      TIMSK1 |= (1 << TOIE1);
+      break;
+    }
+    case 3: gameState.phase = OVER; break;
+  }
+}
+int currentPin = D_1;
+
+void initGame() {
   for(int i = SEG_A; i < SEG_A + 7; i++) {
     pinMode(i, OUTPUT);
     digitalWrite(i, LOW);
@@ -14,18 +86,17 @@ void setup() {
   noInterrupts();           // Alle Interrupts temporär abschalten
   TCCR1A = 0;
   TCCR1B = 0;
-
   TCNT1 = TIMER_SEC;             // Timer nach obiger Rechnung vorbelegen
   TCCR1B |= (1 << CS12);    // 256 als Prescale-Wert spezifizieren
-  TIMSK1 |= (1 << TOIE1);   // Timer Overflow Interrupt aktivieren
   interrupts();
   pinMode(D_1 + 3, OUTPUT);
   digitalWrite(D_1 + 3, LOW);
 }
 
-int currentPin = D_1;
-
-void loop() {
+void gameLoop() {
+  if(hundSecs <= 0) {
+    terminate();
+  }
   int next = getNextDigit();
   int digit = calculateDigit(next);
   pinMode(currentPin, INPUT);
