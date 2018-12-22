@@ -14,7 +14,7 @@ void listenMaster(Network* network, const uint8_t src, const uint8_t *buffer, co
 void listenSlave(Network* network, const uint8_t src, const uint8_t *buffer, const size_t length) {
   if(length == 1) {
     network->_id = buffer[0] + 1;
-    uint8_t data[] = {buffer[0] + 1};
+    uint8_t data[] = {(uint8_t)(buffer[0] + 1)};
     network->send_raw(0, -1, data, 1);
   }
 }
@@ -23,33 +23,31 @@ void Network::init(bool master) {
   if(master) {
     uint8_t data[] = {0};
     send_raw(0, -1, data, 1);
-    receive(true, *listenMaster);
+    bool received = false;
+    do {
+        received = receive(*listenMaster);
+    } while(!received);
   }
   else {
-    receive(true, *listenSlave);
+    bool received = false;
+    do {
+        received = receive(*listenSlave);
+    } while(!received);
   }
 }
 
-void Network::update(callback_func callback) {
-  receive(false, callback);
-}
-
-void Network::receive(bool blocking, callback_func callback) {
+bool Network::receive(callback_func callback) {
   if(discarding) {
     while(required > 0 && Serial.available() > 0) {
       Serial.read();
       required--;
     }
     discarding = required > 0;
-    if(blocking) {
-      receive(blocking, callback);
-    }
-    return;
+    return false;
   }
   else if(!readingPacket) {
     if(Serial.available() < 3) {
-      if(!blocking) return;
-      while(Serial.available() < 3);
+        return false;
     }
     dst = Serial.read();
     src = Serial.read();
@@ -57,29 +55,24 @@ void Network::receive(bool blocking, callback_func callback) {
     //Discard
     if(src == _id || required > MESSAGE_SIZE_MAX) {
       discarding = true;
-      receive(blocking, callback);
-      return;
+      receive(callback);
+      return false;
     }
     readingPacket = true;
   }
-  do {
-    size_t actual = Serial.readBytes(_buffer + (sizeof(uint8_t) * offset), required);
-    required -= actual;
-    offset += actual;
-  } while(required > 0 && blocking);
-  if(required > 0) return;
+  size_t actual = Serial.readBytes(_buffer + (sizeof(uint8_t) * offset), required);
+  required -= actual;
+  offset += actual;
+  if(required > 0) return false;
   readingPacket = false;
-  uint16_t oldOffset = offset;
-  offset = 0;
   if(dst == -1 || dst != _id) {
-    send_raw(dst, src, _buffer, oldOffset);
+    send_raw(dst, src, _buffer, offset);
   }
   if(dst == -1 || dst == _id) {
-    callback(this, src, _buffer, oldOffset);
+    callback(this, src, _buffer, offset);
   }
-  else if(blocking) {
-    receive(blocking, callback);
-  }
+  offset = 0;
+  return true;
 }
 
 size_t Network::send(const int8_t dst, const uint8_t *buffer, const size_t len) {
