@@ -52,11 +52,11 @@ void startGame() {
 }
 
 void gameLoop() {
+  calculateDigits();
   if(hundSecs <= 0) {
     terminate();
     return;
   }
-  calculateDigits();
 }
 
 void terminate() {

@@ -1,7 +1,26 @@
 PROTOCOL
+DST[1],SRC[1],LEN[1],DAT[X]
+
 #0 : INIT
 #1 : INIT_SYNC
 #2 : START
 #3 : OVER
 #4 : STRIKE
-    [4]
+#5 : DISCOVERY
+    MID[2],ID[1]
+
+    
+MODULES
+#0 : Master
+#1 : Timer
+#2 : Simple Wires
+#3 : The Button
+#4 : Symbols
+#5 : Simon Says
+#6 : Morse Code
+#7 : Complicated Wires
+#8 : Maze
+#9 : Passwords
+#10: Needy: Venting Gas
+#11: Needy: Capacitor Discharge
+#12: Needy: Knobs

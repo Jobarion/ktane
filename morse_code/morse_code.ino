@@ -1,14 +1,26 @@
+#define KTANE_MODULE_ID 6
+
+#include <Ktane.h>
+#include <Encoder.h>
+#include <Bounce2.h>
 #include <Arduino.h>
 #include <avr/pgmspace.h>
 #include <limits.h>
 
-#define DURATION_LONG 600
+//Display
+#define D_1 14
+#define SEG_A 4
+#define TIMER_10MSEC 65473
+#define FREQUENCY_START 3500
+
+//Morse code
 #define DURATION_SHORT 200
-#define DURATION_BREAK 1000
-#define CHAR_PAUSE 100
-#define WORD_PAUSE 2000
+#define DURATION_LONG (DURATION_SHORT * 3)
 #define WORD_COUNT 16
-#define MORSE_PIN LED_BUILTIN
+#define MORSE_PIN 18
+#define DONE_PIN 12
+#define TX_PIN 11
+
 
 typedef struct {
   char word[7];
@@ -70,23 +82,100 @@ const morse_symbol morseTable[26][5] = {
   {LONG, LONG, SHORT, SHORT, BREAK}   //Z
 };
 
-word_t target;
-uint8_t wordPosition = -1;
-uint8_t charPosition = 0;
-int durationLeft = 0;
-long lastTime;
+Network* network;
+Ktane* ktane;
 
 void setup() {
-  randomSeed(analogRead(0));
-  memcpy_P( &target, &words[random(WORD_COUNT)], sizeof(word_t));
-  pinMode(MORSE_PIN, OUTPUT);
-  digitalWrite(MORSE_PIN, LOW);
-  lastTime = millis();
-  delay(2000);
+  network = new Network(9600);
+  network->init(false);
+  ktane = new Ktane(network, *initGame, *startGame, *gameLoop, NULL);
 }
 
 void loop() {
-  lastTime = curTime;
+  ktane->refresh();
+}
+
+void completed() {
+  ktane->gameState.phase = OVER;
+  digitalWrite(MORSE_PIN, LOW);
+  digitalWrite(DONE_PIN, HIGH);
+}
+
+void strike() {
+  
+}
+
+// MORSE CODE //
+
+word_t target;
+int wordPosition = 0;
+int charPosition = 0;
+int durationLeft = 0;
+long lastTime;
+Bounce txButton;
+
+Encoder knob(2, 3);
+long frequency = FREQUENCY_START;
+
+void initGame() {
+  //MORSE CODE
+  randomSeed(analogRead(5));
+  memcpy_P( &target, &words[random(WORD_COUNT)], sizeof(word_t));
+  pinMode(MORSE_PIN, OUTPUT);
+  digitalWrite(MORSE_PIN, LOW);
+
+  //DISPLAY
+  calculateDigits();
+  for(int i = SEG_A; i < SEG_A + 7; i++) {
+    pinMode(i, OUTPUT);
+    digitalWrite(i, HIGH);
+  }
+  for(int i = 0; i < 4; i++) {
+    pinMode(D_1 + i, OUTPUT);
+    digitalWrite(D_1 + i, LOW);
+  }
+  noInterrupts();
+  TCCR1A = 0;
+  TCCR1B = 0;
+  TCNT1 = TIMER_10MSEC;
+  TCCR1B |= (1 << CS12);
+  interrupts();
+
+  pinMode(MORSE_PIN, OUTPUT);
+  digitalWrite(MORSE_PIN, LOW);
+  pinMode(DONE_PIN, OUTPUT);
+  digitalWrite(DONE_PIN, LOW);
+
+  pinMode(TX_PIN, INPUT_PULLUP);
+  txButton = Bounce();
+  txButton.attach(TX_PIN, INPUT_PULLUP);
+  txButton.interval(50);
+  
+  pinMode(TX_PIN, INPUT_PULLUP);
+}
+
+void startGame() {
+  lastTime = millis();
+  TIMSK1 |= (1 << TOIE1);//Start timer
+}
+
+void gameLoop() {
+  long newFrequency = FREQUENCY_START + knob.read() / 4;
+  if(newFrequency != frequency) {
+    frequency = newFrequency;
+    calculateDigits();
+  }
+  
+  txButton.update();
+  if(txButton.read() == LOW) {
+    if(frequency == target.khz) {
+      completed();
+    }
+    else {
+      strike();
+    }
+  }
+  
   durationLeft -= deltaT();
   if(durationLeft <= 0) {
     advance();
@@ -104,46 +193,134 @@ long deltaT() {
 }
 
 void advance() {
-  if(wordPosition >= 0 && digitalRead(MORSE_PIN)) {
-    durationLeft = CHAR_PAUSE;
-    digitalWrite(MORSE_PIN, LOW);
-    return;
-  }
-  if(wordPosition < 0) {
-    wordPosition = 0;
-  }
+  if(digitalRead(MORSE_PIN)) {
+    charPosition++;
     if(currentSymbol() == BREAK) {
       wordPosition++;
       charPosition = 0;
       if(target.word[wordPosition] == '\0') {
         wordPosition = 0;
-        durationLeft = WORD_PAUSE;
-        return;
+        durationLeft = DURATION_SHORT * 7; //Word break
+      }
+      else {
+        durationLeft = DURATION_SHORT * 3; //Character break
       }
     }
     else {
-      charPosition++;
+      durationLeft = DURATION_SHORT; //Morse symbol break
     }
-    switch(currentSymbol()) {
-      case SHORT: {
-        digitalWrite(MORSE_PIN, HIGH);
-        durationLeft = DURATION_SHORT;
-        break;
-      }
-      case LONG: {
-        digitalWrite(MORSE_PIN, HIGH);
-        durationLeft = DURATION_LONG;
-        break;
-      }
-      case BREAK: {
-        durationLeft = DURATION_BREAK;
-        break;
-      }
+    digitalWrite(MORSE_PIN, LOW);
+    return;
+  }
+  digitalWrite(MORSE_PIN, HIGH);
+  switch(currentSymbol()) {
+    case SHORT: {
+      durationLeft = DURATION_SHORT;
+      break;
     }
+    case LONG: {
+      durationLeft = DURATION_LONG;
+      break;
+    }
+  }
 }
 
 morse_symbol currentSymbol() {
   char c = target.word[wordPosition];
   const morse_symbol* code = morseTable[c - 'a'];
   return code[charPosition];  
+}
+
+// DISPLAY //
+
+struct LED_PINS {
+  int16_t D;
+  int16_t B;
+};
+
+int currentPin = D_1;
+LED_PINS digitPins[4];
+
+ISR(TIMER1_OVF_vect) {
+  currentPin = (currentPin == D_1 + 3 ? D_1 : currentPin + 1);
+  PORTD = PORTD | B11110000;
+  PORTD = PORTD & digitPins[currentPin - D_1].D;
+  PORTB = PORTB | B00000111;
+  PORTB = PORTB & digitPins[currentPin - D_1].B;
+  PORTC = PORTC & B11110000;
+  PORTC = PORTC | (1 << (currentPin - D_1));
+  TCNT1 = TIMER_10MSEC;
+}
+
+void calculateDigits() {
+  uint8_t digits[4];
+  digits[3] = (frequency / 1000) % 10;
+  digits[2] = (frequency / 100) % 10;
+  digits[1] = (frequency / 10) % 10;
+  digits[0] = frequency % 10;
+  for(int i = 0; i < 4; i++) {
+    digitPins[i] = getPinData(digits[i]);
+  }
+}
+
+struct LED_PINS getPinData(int digit) {
+  LED_PINS pins;
+  switch(digit) {
+    case 0: {
+      pins.D = ~B11110000;
+      pins.B = ~B00000011;
+      break;
+    }
+    case 1: {
+      pins.D = ~B01100000;
+      pins.B = ~B11111000;
+      break;
+    }
+    case 2: {
+      pins.D = ~B10110000;
+      pins.B = ~B00000101;
+      break;
+    }
+    case 3: {
+      pins.D = ~B11110000;
+      pins.B = ~B00000100;
+      break;
+    }
+    case 4: {
+      pins.D = ~B01100000;
+      pins.B = ~B00000110;
+      break;
+    }
+    case 5: {
+      pins.D = ~B11010000;
+      pins.B = ~B00000110;
+      break;
+    }
+    case 6: {
+      pins.D = ~B11010000;
+      pins.B = ~B00000111;
+      break;
+    }
+    case 7: {
+      pins.D = ~B01110000;
+      pins.B = ~B11111000;
+      break;
+    }
+    case 8: {
+      pins.D = ~B11110000;
+      pins.B = ~B00000111;
+      break;
+    }
+    case 9: {
+      pins.D = ~B11110000;
+      pins.B = ~B00000110;
+      break;
+    }
+  }
+  return pins;
+}
+
+void clearPins() {
+  PORTD = PORTD | B11100000;
+  PORTB = PORTB | B00001111;
 }

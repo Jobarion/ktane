@@ -64,9 +64,8 @@ void Ktane::_acceptPacket(Network* network, const uint8_t src, const uint8_t *bu
       gameState.phase = OVER;
       break;
     }
-    default: {
-      if(Ktane::networkCallback != NULL)
-        Ktane::networkCallback(network, src, buffer, length);
-    }
+  }
+  if(Ktane::networkCallback != NULL) {
+    Ktane::networkCallback(network, src, buffer, length);
   }
 }

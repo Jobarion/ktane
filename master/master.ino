@@ -1,3 +1,5 @@
+#define KTANE_MODULE_ID 0
+
 #include <Ktane.h>
 
 Network* network;

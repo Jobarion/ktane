@@ -1,3 +1,7 @@
+#ifndef KTANE_MODULE_ID
+    #define KTANE_MODULE_ID -1
+#endif
+
 #include "Network.h"
 
 enum Phase {
@@ -31,9 +35,9 @@ class Ktane {
         Network* network;
         void _acceptPacket(Network* network, const uint8_t src, const uint8_t *buffer, const size_t length);
     private:
-      void (*initGame)();
-      void (*startGame)();
-      void (*gameLoop)();
-      void (*networkCallback)(Network* network, const uint8_t src, const uint8_t *buffer, const size_t length);
-
+        bool solved;
+        void (*initGame)();
+        void (*startGame)();
+        void (*gameLoop)();
+        void (*networkCallback)(Network* network, const uint8_t src, const uint8_t *buffer, const size_t length);
 };

@@ -46,7 +46,7 @@ long lastTime;
 void setup() {
   network = new Network(9600);
   network->init(false);
-  ktane = new Ktane(network, *initGame, *startGame, *gameLoop, NULL);
+  ktane = new Ktane(network, *initGame, *startGame, *gameLoop, *acceptPacket);
 }
 
 void loop() {
@@ -234,6 +234,19 @@ void strike() {
   uint8_t buffer[] = {4};
   network->broadcast(buffer, 1);
   deltaT();//Reset delta timer
+}
+
+void acceptPacket(Network* network, const uint8_t src, const uint8_t *buffer, const size_t length) {
+  if(length == 0 || buffer == NULL) return;
+  switch(buffer[0]) {
+    case 3: {
+      pixels.setPixelColor(currentPos, pixels.Color(0, 0, 0));
+      pixels.setPixelColor(maze.circle1, pixels.Color(0, 0, 0));
+      pixels.setPixelColor(maze.circle2, pixels.Color(0, 0, 0));
+      pixels.setPixelColor(maze.goal, pixels.Color(0, 0, 0));
+      pixels.show();
+    }
+  }
 }
 
 Maze getMaze(uint8_t mazeId) {
