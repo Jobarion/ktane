@@ -14,7 +14,9 @@ Ktane* ktane;
 void setup() {
   network = new Network(9600);
   network->init(false);
-  ktane = new Ktane(network, *initGame, *startGame, *gameLoop, NULL);
+  ktane = new Ktane(network, *initGame, *startGame, *gameLoop, NULL, NULL);
+  ktane->solvable = false;
+  ktane->KTANE_MODULE_ID = 1;
 }
 
 void loop() {

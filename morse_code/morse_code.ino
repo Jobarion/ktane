@@ -1,5 +1,3 @@
-#define KTANE_MODULE_ID 6
-
 #include <Ktane.h>
 #include <Encoder.h>
 #include <Bounce2.h>
@@ -88,7 +86,8 @@ Ktane* ktane;
 void setup() {
   network = new Network(9600);
   network->init(false);
-  ktane = new Ktane(network, *initGame, *startGame, *gameLoop, NULL);
+  ktane = new Ktane(network, *initGame, *startGame, *gameLoop, *cleanupGame, NULL);
+  ktane->KTANE_MODULE_ID = 6;
 }
 
 void loop() {
@@ -97,12 +96,17 @@ void loop() {
 
 void completed() {
   ktane->gameState.phase = OVER;
+  uint8_t buffer[1];
+  buffer[0] = 6;
+  network->send(0, buffer, 1);
   digitalWrite(MORSE_PIN, LOW);
   digitalWrite(DONE_PIN, HIGH);
 }
 
 void strike() {
-  
+  uint8_t buffer[] = {4};
+  network->broadcast(buffer, 1);
+  ktane->gameState.strikes++;
 }
 
 // MORSE CODE //
@@ -112,10 +116,15 @@ int wordPosition = 0;
 int charPosition = 0;
 int durationLeft = 0;
 long lastTime;
+bool pressed = false;
 Bounce txButton;
 
 Encoder knob(2, 3);
 long frequency = FREQUENCY_START;
+
+void cleanupGame() {
+  digitalWrite(MORSE_PIN, LOW);
+}
 
 void initGame() {
   //MORSE CODE
@@ -167,7 +176,11 @@ void gameLoop() {
   }
   
   txButton.update();
-  if(txButton.read() == LOW) {
+  if(txButton.read() == HIGH) {
+    pressed = false;
+  }
+  else if(!pressed) {
+    pressed = true;
     if(frequency == target.khz) {
       completed();
     }
@@ -273,7 +286,7 @@ struct LED_PINS getPinData(int digit) {
     }
     case 1: {
       pins.D = ~B01100000;
-      pins.B = ~B11111000;
+      pins.B = ~B00000000;
       break;
     }
     case 2: {
@@ -303,7 +316,7 @@ struct LED_PINS getPinData(int digit) {
     }
     case 7: {
       pins.D = ~B01110000;
-      pins.B = ~B11111000;
+      pins.B = ~B00000000;
       break;
     }
     case 8: {
@@ -318,9 +331,4 @@ struct LED_PINS getPinData(int digit) {
     }
   }
   return pins;
-}
-
-void clearPins() {
-  PORTD = PORTD | B11100000;
-  PORTB = PORTB | B00001111;
 }

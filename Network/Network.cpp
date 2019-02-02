@@ -2,17 +2,18 @@
 #include "Arduino.h"
 #define BROADCAST_ADDR -1
 
-typedef void (*callback_func)(Network* network, const uint8_t src, const uint8_t *buffer, const size_t length);
+typedef void (*callback_func)(Network* network, const uint8_t src, const uint8_t dst, uint8_t *buffer, size_t *length);
 
 Network::Network(unsigned long baud) {
   Serial.begin(baud);
 }
 
-void listenMaster(Network* network, const uint8_t src, const uint8_t *buffer, const size_t length) {
+void listenMaster(Network* network, const uint8_t src, const uint8_t dst, uint8_t *buffer, size_t *length) {
   network->networkSize = buffer[0] + 1;
 }
-void listenSlave(Network* network, const uint8_t src, const uint8_t *buffer, const size_t length) {
-  if(length == 1) {
+
+void listenSlave(Network* network, const uint8_t src, const uint8_t dst, uint8_t *buffer, size_t *length) {
+  if(*length == 1) {
     network->_id = buffer[0] + 1;
     uint8_t data[] = {(uint8_t)(buffer[0] + 1)};
     network->send_raw(0, -1, data, 1);
@@ -53,7 +54,15 @@ bool Network::receive(callback_func callback) {
     src = Serial.read();
     required = Serial.read();
     //Discard
-    if(src == _id || required > MESSAGE_SIZE_MAX) {
+    if(src == _id) {
+        if(dst == BROADCAST_ADDR && !READ_OWN_BROADCASTS) {
+            discarding = true;
+        }
+        else if(!READ_OWN_PACKETS) {
+            discarding = true;
+        }
+    }
+    if(discarding || required > MESSAGE_SIZE_MAX) {
       discarding = true;
       receive(callback);
       return false;
@@ -65,11 +74,12 @@ bool Network::receive(callback_func callback) {
   offset += actual;
   if(required > 0) return false;
   readingPacket = false;
-  if(dst == -1 || dst != _id) {
-    send_raw(dst, src, _buffer, offset);
+  uint8_t nid = _id; //Save network ID because listenSlave changes it which causes issues in the init sequence
+  if(dst == BROADCAST_ADDR || dst == nid || READ_FORWARDED_PACKETS) {
+    callback(this, src, dst, _buffer, &offset);
   }
-  if(dst == -1 || dst == _id) {
-    callback(this, src, _buffer, offset);
+  if(offset != 0 && src != nid && (dst == BROADCAST_ADDR || dst != nid)) {
+    send_raw(dst, src, _buffer, offset);
   }
   offset = 0;
   return true;

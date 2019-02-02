@@ -1,7 +1,3 @@
-#ifndef KTANE_MODULE_ID
-    #define KTANE_MODULE_ID -1
-#endif
-
 #include "Network.h"
 
 enum Phase {
@@ -28,16 +24,19 @@ struct Settings {
 
 class Ktane {
     public:
-        Ktane(Network* network, void (*initGame)(), void (*startGame)(), void (*gameLoop)(), void (*networkCallback)(Network* network, const uint8_t src, const uint8_t *buffer, const size_t length));
+        Ktane(Network* network, void (*initGame)(), void (*startGame)(), void (*gameLoop)(), void (*cleanupGame)(), void (*networkCallback)(Network* network, const uint8_t src, const uint8_t dst, uint8_t *buffer, size_t* length));
         void refresh();
         State gameState;
         Settings settings;
         Network* network;
-        void _acceptPacket(Network* network, const uint8_t src, const uint8_t *buffer, const size_t length);
+        bool solvable = true;
+        uint16_t KTANE_MODULE_ID = -1;
+        void _acceptPacket(Network* network, const uint8_t src, const uint8_t dst, uint8_t *buffer, size_t* length);
     private:
         bool solved;
         void (*initGame)();
         void (*startGame)();
         void (*gameLoop)();
-        void (*networkCallback)(Network* network, const uint8_t src, const uint8_t *buffer, const size_t length);
+        void (*cleanupGame)();
+        void (*networkCallback)(Network* network, const uint8_t src, const uint8_t dst, uint8_t *buffer, size_t* length);
 };

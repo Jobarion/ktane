@@ -1,11 +1,10 @@
-#define KTANE_MODULE_ID 0
-
 #include <Ktane.h>
 
 Network* network;
 
 State gameState;
 Settings settings;
+int winsRequired = 0;
 
 union settings_u {
   Settings settings;
@@ -13,6 +12,8 @@ union settings_u {
 };
 
 void setup() {
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
   network = new Network(9600);
   network->init(true);
   settings.maxStrikes = 3;
@@ -41,19 +42,37 @@ void initStart() {
 
 void initSync() {
   gameState.phase = INIT_SYNC;
-  uint8_t buffer[1];
+  uint8_t buffer[2];
   buffer[0] = 1;
-  network->send(network->networkSize - 1, buffer, 1);
+  buffer[1] = 0;
+  network->send(network->networkSize - 1, buffer, 2);
 }
 
-void acceptPacket(Network* network, const uint8_t src, const uint8_t *buffer, const size_t length) {
-  if(length == 0 || buffer == NULL) return;
+void acceptPacket(Network* network, const uint8_t src, const uint8_t dst, uint8_t *buffer, size_t* length) {
+  if(*length == 0 || buffer == NULL) return;
   switch(buffer[0]) {
     case 0:
     case 2: terminate(); break;
-    case 1: startGame(); break;
+    case 1: {
+      if(*length != 2) {
+        terminate();
+      }
+      else {
+        winsRequired = buffer[1];
+        startGame(); 
+      }
+      break;
+    }
     case 3: gameState.phase = OVER; break;
     case 4: strike(); break;
+    case 6: {
+      winsRequired--;
+      if(winsRequired == 0) {
+        terminate();
+        digitalWrite(LED_BUILTIN, HIGH);
+      }
+      break;
+    }
   }
 }
 
